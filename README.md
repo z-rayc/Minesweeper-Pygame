@@ -1,6 +1,9 @@
 # Minesweeper
 A minesweeper game made with Pygame.
 
+## Downloading
+- Download the `Minesweeper.exe` file to get the application.
+
 ## How to play
 - Left-click on an unopened tile to open it and reveal if it has a mine or not.
     - If it has no mine, then it will show how many neighbouring tiles have mines.
