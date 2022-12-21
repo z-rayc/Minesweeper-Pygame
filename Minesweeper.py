@@ -1,6 +1,5 @@
 import pygame
 import random
-# This uses Python 3.8.5 64-bit
 
 pygame.init()
 
@@ -47,7 +46,7 @@ def draw_grid(grid):
     for col in range(0, X_TILES):
         for row in range(0, Y_TILES):
             tile = grid[col][row]
-            tile.drawTile()
+            tile.draw_tile()
             
 def get_neighbours(grid, tile):
     """ Get all neighbours of the given tile. """
@@ -141,7 +140,7 @@ def open_neighbour_tiles(grid, tile):
         current_tile = neighbours[i]
         
         if current_tile.is_open == False and current_tile.is_flagged == False:
-            current_tile.openTile()
+            current_tile.open_tile()
             global OPENED_TILES
             OPENED_TILES += 1
         
@@ -151,14 +150,34 @@ def open_neighbour_tiles(grid, tile):
 def draw_center_text(text):
     """ Draw some text in the center of the window. """
     text = TEXT_FONT.render(text, 1, TEXT_COLOR)
-    pygame.draw.rect(window, BORDER_COLOR, (0, Y_TILES*TILE_SIZE/2 - text.get_height()/2, X_TILES*TILE_SIZE, text.get_height()))
-    window.blit(text, (X_TILES*TILE_SIZE/2 - text.get_width()/2, Y_TILES*TILE_SIZE/2 - text.get_height()/2))
+    pygame.draw.rect(window, BORDER_COLOR, (0, HEIGHT/2 - text.get_height()/2, X_TILES*TILE_SIZE, text.get_height()))
+    window.blit(text, (WIDTH/2 - text.get_width()/2, HEIGHT/2 - text.get_height()/2))
     pygame.display.update()
 
+def get_nearby_flags(grid, tile):
+    return list(filter(lambda x: (x.is_flagged == True), get_neighbours(grid, tile)))
+
+def open_all_mines(grid):
+    unopened_mine_tiles = list(filter(lambda x: (x.has_mine == True and x.is_open == False), get_all_tiles(grid)))
+    for i in range(0, len(unopened_mine_tiles)):
+        unopened_mine_tiles[i].open_tile()
+
+def flag_all_mines(grid):
+    unflagged_mine_tiles = list(filter(lambda x: (x.has_mine == True and x.is_flagged == False), get_all_tiles(grid)))
+    for i in range(0, len(unflagged_mine_tiles)):
+        unflagged_mine_tiles[i].toggle_flag()
+        
+def open_all_safe_tiles(grid):
+    unopened_safe_tiles = list(filter(lambda x: (x.has_mine == False and x.is_open == False), get_all_tiles(grid)))
+    for i in range(0, len(unopened_safe_tiles)):
+        unopened_safe_tiles[i].open_tile()
+        
 def main():
     """ Runs the game. """
     is_running = True
     has_first_click = True
+    global is_defeated
+    is_defeated = False
     
     window.fill(BG_COLOR)
     grid = make_grid(X_TILES, Y_TILES)
@@ -177,10 +196,11 @@ def main():
                     col, row = get_grid_pos(pygame.mouse.get_pos())
                     marked_tile = grid[col][row]
                     
-                    if marked_tile.is_open == False:
+                    if marked_tile.is_open == False: # Flag tile
                         marked_tile.toggle_flag()
-                    # else:
-                        # TODO: If nearbyFlags == nearbyBombs, open neighbouring tiles
+                    else: # Reveal neighbours
+                        if len(get_nearby_flags(grid, marked_tile)) == marked_tile.nearby_mines:
+                            open_neighbour_tiles(grid, marked_tile)
             
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pressed = pygame.mouse.get_pressed()
@@ -195,18 +215,11 @@ def main():
                     if has_first_click == True:
                         generate_mines(grid, clicked_tile)
                         set_nearby_mines(grid)
-                        
-                    # TODO: If mine, is_defeated = true, and reveal all mines
                     
                     if clicked_tile.is_open == False and clicked_tile.is_flagged == False:
-                        clicked_tile.openTile()
+                        clicked_tile.open_tile()
                         global OPENED_TILES
                         OPENED_TILES += 1
-                        
-                        if clicked_tile.has_mine == True:
-                            draw_center_text("You lost. Try again!")
-                            pygame.time.delay(4000)
-                            is_running = False
                         
                         if clicked_tile.nearby_mines == 0 and clicked_tile.has_mine == False:
                             open_neighbour_tiles(grid, clicked_tile)
@@ -218,8 +231,22 @@ def main():
                         clicked_tile.toggle_flag()
             
             if OPENED_TILES == SAFE_TILES:
+                open_all_safe_tiles(grid)
+                flag_all_mines(grid)
+                pygame.display.update()
+                pygame.time.delay(500)
+                
                 # TODO: Reset the board and start a new game
                 draw_center_text("Congrats, you win!")
+                pygame.time.delay(4000)
+                is_running = False
+            
+            if is_defeated == True:
+                open_all_mines(grid)
+                pygame.display.update()
+                pygame.time.delay(500)
+                
+                draw_center_text("You lost. Try again!")
                 pygame.time.delay(4000)
                 is_running = False
             
@@ -227,7 +254,7 @@ def main():
     
 class Tile:
     def __init__(self, x_pos, y_pos) -> None:
-        """ Initialise the values of the tile """
+        """ Initialise the values of the tile. """
         self.x_pos = x_pos
         self.y_pos = y_pos
         self.is_open = False
@@ -235,13 +262,17 @@ class Tile:
         self.has_mine = False
         self.nearby_mines = 0
         
-    def drawTile(self):
+    def draw_tile(self):
         """ Draw the tile onto the window. """
         pygame.draw.rect(window, TILE_COLOR, (self.x_pos, self.y_pos, TILE_SIZE, TILE_SIZE))
         pygame.draw.rect(window, BORDER_COLOR, (self.x_pos, self.y_pos, TILE_SIZE, TILE_SIZE), 1)
         
-    def openTile(self):
+    def open_tile(self):
         """ Draw the open tile onto the window. """
+        if self.has_mine:
+            global is_defeated
+            is_defeated = True
+        
         self.is_open = True
         
         pygame.draw.rect(window, OPEN_TILE_COLOR, (self.x_pos, self.y_pos, TILE_SIZE, TILE_SIZE))
@@ -261,7 +292,7 @@ class Tile:
         self.is_flagged = not self.is_flagged
         
         if self.is_flagged == False:
-            self.drawTile()
+            self.draw_tile()
         else:
             pygame.draw.polygon(window, FLAG_COLOR, ((self.x_pos + TILE_SIZE/5, self.y_pos + TILE_SIZE/5), (self.x_pos + TILE_SIZE/5, self.y_pos + TILE_SIZE - TILE_SIZE/5), (self.x_pos + TILE_SIZE - TILE_SIZE/5, self.y_pos + TILE_SIZE/2)))
             
