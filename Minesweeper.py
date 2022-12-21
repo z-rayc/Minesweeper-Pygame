@@ -3,12 +3,13 @@ import random
 
 pygame.init()
 
-X_TILES = 10
-Y_TILES = 10
+X_TILES = 30
+Y_TILES = 16
 TILE_SIZE = 40
 WIDTH = X_TILES * TILE_SIZE
 HEIGHT = Y_TILES * TILE_SIZE
-TOTAL_MINES = 10
+TOTAL_MINES = 99
+UNFLAGGED_MINES = TOTAL_MINES
 
 SAFE_TILES = X_TILES * Y_TILES - TOTAL_MINES
 OPENED_TILES = 0
@@ -17,6 +18,7 @@ NUM_FONT = pygame.font.SysFont('ebrima', 20)
 NUM_COLORS = {1: "blue", 2: "green4", 3: "red", 4: "dodgerblue4", 5: "firebrick4", 6: "cyan4", 7: "black", 8: "grey"}
 TEXT_FONT = pygame.font.SysFont('arialblack', 30)
 TEXT_COLOR = "white"
+UNFLAGGED_FONT = pygame.font.SysFont('ebrima', 30)
 
 BG_COLOR = "white"
 TILE_COLOR = "lightgrey"
@@ -25,7 +27,7 @@ OPEN_TILE_COLOR = "darkgray"
 FLAG_COLOR = "deeppink4"
 MINE_COLOR = "black"
 
-window = pygame.display.set_mode((WIDTH, HEIGHT))
+window = pygame.display.set_mode((WIDTH, HEIGHT + UNFLAGGED_FONT.get_height()))
 pygame.display.set_caption("Minesweeper")
 
 def get_grid_pos(mouse_pos):
@@ -155,23 +157,49 @@ def draw_center_text(text):
     pygame.display.update()
 
 def get_nearby_flags(grid, tile):
+    """ Get the neighbouring tiles that are flagged. """
     return list(filter(lambda x: (x.is_flagged == True), get_neighbours(grid, tile)))
 
 def open_all_mines(grid):
+    """ Open all the tiles that are unopened
+    and contain a mine. """
     unopened_mine_tiles = list(filter(lambda x: (x.has_mine == True and x.is_open == False), get_all_tiles(grid)))
     for i in range(0, len(unopened_mine_tiles)):
         unopened_mine_tiles[i].open_tile()
 
 def flag_all_mines(grid):
+    """ Flag all the tiles that has mines. """
     unflagged_mine_tiles = list(filter(lambda x: (x.has_mine == True and x.is_flagged == False), get_all_tiles(grid)))
     for i in range(0, len(unflagged_mine_tiles)):
         unflagged_mine_tiles[i].toggle_flag()
         
 def open_all_safe_tiles(grid):
+    """ Open all the tiles that has no mines. """
     unopened_safe_tiles = list(filter(lambda x: (x.has_mine == False and x.is_open == False), get_all_tiles(grid)))
     for i in range(0, len(unopened_safe_tiles)):
         unopened_safe_tiles[i].open_tile()
-        
+
+def reset(grid):
+    # TODO: Make has_first_click, is_defeated and grid to global variables
+    # Then can also stop using it as a parameter in everything
+    """ Draw the new grid, and return the starting 
+    values for changed variables. """
+    grid = make_grid(X_TILES, Y_TILES)
+    draw_grid(grid)
+    global OPENED_TILES
+    OPENED_TILES = 0
+    global UNFLAGGED_MINES
+    UNFLAGGED_MINES = TOTAL_MINES
+    update_unflagged_mines_text()
+    
+    return True, False, grid
+
+def update_unflagged_mines_text():
+    text = TEXT_FONT.render(str(UNFLAGGED_MINES), 1, BORDER_COLOR)
+    pygame.draw.rect(window, BG_COLOR, (WIDTH - 2*TILE_SIZE, HEIGHT, 2*TILE_SIZE, text.get_height()))
+    window.blit(text, (WIDTH - text.get_width(), HEIGHT))
+    pygame.display.update()
+
 def main():
     """ Runs the game. """
     is_running = True
@@ -180,8 +208,13 @@ def main():
     is_defeated = False
     
     window.fill(BG_COLOR)
-    grid = make_grid(X_TILES, Y_TILES)
+    grid = 0
+    has_first_click, is_defeated, grid = reset(grid)
+    
+    
+    """ grid = make_grid(X_TILES, Y_TILES)
     draw_grid(grid)
+    update_unflagged_mines_text() """
     
     while is_running:
         pygame.display.update()
@@ -211,12 +244,13 @@ def main():
                 
                 clicked_tile = grid[col][row]
                 
-                if mouse_pressed[0]: # Right click
-                    if has_first_click == True:
-                        generate_mines(grid, clicked_tile)
-                        set_nearby_mines(grid)
-                    
+                if mouse_pressed[0]: # Left click
                     if clicked_tile.is_open == False and clicked_tile.is_flagged == False:
+                        if has_first_click == True:
+                            generate_mines(grid, clicked_tile)
+                            set_nearby_mines(grid)
+                            has_first_click = False
+                        
                         clicked_tile.open_tile()
                         global OPENED_TILES
                         OPENED_TILES += 1
@@ -224,9 +258,9 @@ def main():
                         if clicked_tile.nearby_mines == 0 and clicked_tile.has_mine == False:
                             open_neighbour_tiles(grid, clicked_tile)
                     
-                    has_first_click = False
                     
-                elif mouse_pressed[2]: # Left click
+                    
+                elif mouse_pressed[2]: # Right click
                     if clicked_tile.is_open == False:
                         clicked_tile.toggle_flag()
             
@@ -236,19 +270,20 @@ def main():
                 pygame.display.update()
                 pygame.time.delay(500)
                 
-                # TODO: Reset the board and start a new game
                 draw_center_text("Congrats, you win!")
-                pygame.time.delay(4000)
-                is_running = False
-            
+                pygame.time.delay(3000)
+                
+                has_first_click, is_defeated, grid = reset(grid)
+
             if is_defeated == True:
                 open_all_mines(grid)
                 pygame.display.update()
                 pygame.time.delay(500)
                 
                 draw_center_text("You lost. Try again!")
-                pygame.time.delay(4000)
-                is_running = False
+                pygame.time.delay(3000)
+                
+                has_first_click, is_defeated, grid = reset(grid)
             
     pygame.quit()
     
@@ -293,8 +328,12 @@ class Tile:
         
         if self.is_flagged == False:
             self.draw_tile()
+            global UNFLAGGED_MINES
+            UNFLAGGED_MINES += 1
         else:
             pygame.draw.polygon(window, FLAG_COLOR, ((self.x_pos + TILE_SIZE/5, self.y_pos + TILE_SIZE/5), (self.x_pos + TILE_SIZE/5, self.y_pos + TILE_SIZE - TILE_SIZE/5), (self.x_pos + TILE_SIZE - TILE_SIZE/5, self.y_pos + TILE_SIZE/2)))
+            UNFLAGGED_MINES -= 1
+        update_unflagged_mines_text()
             
 if __name__ == "__main__":
     main()
